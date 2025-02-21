@@ -5,7 +5,7 @@
     "name": "Web Syncer",
     "summary": "Generic CUD model notifications on web client side",
     "category": "Web",
-    "version": "11.0.1.0.0",
+    "version": "18.0.1.0.0",
     "license": "LGPL-3",
     "author": "Modoolar",
     "website": "https://www.modoolar.com/",

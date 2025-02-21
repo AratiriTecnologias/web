@@ -85,7 +85,6 @@ class Base(models.AbstractModel):
         names.append(field.name)
         cls._syncer_related_fields[root] = names
 
-    @api.multi
     def _write(self, vals):
         if is_module_installed(self.env, "web_syncer") and \
                 self._implements_syncer:
@@ -93,7 +92,6 @@ class Base(models.AbstractModel):
                 self.env.syncer.update(record, vals)
         return super(Base, self)._write(vals)
 
-    @api.multi
     def write(self, vals):
         if not is_module_installed(self.env, "web_syncer"):
             return super(Base, self).write(vals)
@@ -139,7 +137,6 @@ class Base(models.AbstractModel):
                     record.push_write_notification(delta, indirect)
         return new
 
-    @api.multi
     def unlink(self):
         if is_module_installed(self.env, "web_syncer") and \
                 self._implements_syncer:
