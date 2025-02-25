@@ -14,5 +14,10 @@
     "data": [
         "views/web_ir_actions_act_view_reload.xml",
     ],
+    'assets': { # https://www.odoo.com/documentation/12.0/developer/reference/javascript_reference.html#main-bundles
+        'web.assets_frontend': [
+            "static/src/js/web_ir_actions_act_view_reload.js",
+        ],
+    },
     "installable": True,
 }

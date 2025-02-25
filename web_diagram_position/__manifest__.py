@@ -17,4 +17,12 @@
     "data": [
         "views/web_diagram_position.xml",
     ],
+    'assets': { # https://www.odoo.com/documentation/12.0/developer/reference/javascript_reference.html#main-bundles
+        'web.assets_frontend': [
+            "static/src/js/graph.js",
+            "static/src/js/diagram_model.js",
+            "static/src/js/diagram_controller.js",
+            "static/src/js/diagram_renderer.js",
+        ],
+    },
 }
