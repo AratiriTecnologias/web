@@ -4,6 +4,12 @@
 Web addons for Odoo
 ===================
 
+## Install requirements
+
+```bash
+pip install -r requirements.txt
+```
+
 This project aims to deal with modules related to the webclient of Odoo. You'll find modules that:
 
 - Add facilities to the UI
