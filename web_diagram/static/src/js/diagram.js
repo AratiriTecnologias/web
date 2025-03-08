@@ -2,12 +2,16 @@
  * OpenERP diagram library
  *---------------------------------------------------------*/
 
-openerp.web_diagram = function (instance) {
-var QWeb = instance.web.qweb,
-      _t = instance.web._t,
-     _lt = instance.web._lt;
-instance.web.views.add('diagram', 'instance.web.DiagramView');
-instance.web.DiagramView = instance.web.View.extend({
+odoo.define('web_diagram.DiagramView', function (require) {
+    "use strict";
+
+    var core = require('web.core');
+    var View = require('web.View');
+    var QWeb = core.qweb;
+    var _t = core._t;
+    var _lt = core._lt;
+
+    var DiagramView = View.extend({
     display_name: _lt('Diagram'),
     view_type: 'diagram',
     searchable: false,
@@ -101,11 +105,12 @@ instance.web.DiagramView = instance.web.View.extend({
             params['connectors_fields'].push(self.fields[conn.attrs.name]['string']|| this.toTitleCase(conn.attrs.name));
             params['connectors'].push(conn.attrs.name);
         });
-        this.rpc(
-            '/web_diagram/diagram/get_diagram_info',params).done(function(result) {
-                self.draw_diagram(result);
-            }
-        );
+        this._rpc({
+            route: '/web_diagram/diagram/get_diagram_info',
+            params: params,
+        }).then(function(result) {
+            self.draw_diagram(result);
+        });
     },
 
     on_diagram_loaded: function(record) {
@@ -209,25 +214,22 @@ instance.web.DiagramView = instance.web.View.extend({
             if(!confirm(_t("Deleting this node cannot be undone.\nIt will also delete all connected transitions.\n\nAre you sure ?"))){
                 return $.Deferred().reject().promise();
             }
-            return new instance.web.DataSet(self,self.node).unlink([cutenode.id]);
-        };
-        CuteEdge.double_click_callback = function(cuteedge){
-            self.edit_connector(cuteedge.id);
-        };
-
-        CuteEdge.creation_callback = function(node_start, node_end){
-            return {label:_t("")};
-        };
-        CuteEdge.new_edge_callback = function(cuteedge){
-            self.add_connector(cuteedge.get_start().id,
-                               cuteedge.get_end().id,
-                               cuteedge);
+            return this._rpc({
+                model: self.node,
+                method: 'unlink',
+                args: [[cutenode.id]],
+            });
         };
         CuteEdge.destruction_callback = function(cuteedge){
             if(!confirm(_t("Deleting this transition cannot be undone.\n\nAre you sure ?"))){
                 return $.Deferred().reject().promise();
             }
-            return new instance.web.DataSet(self,self.connector).unlink([cuteedge.id]);
+            return this._rpc({
+                model: self.connector,
+                method: 'unlink',
+                args: [[cuteedge.id]],
+            });
+        };
         };
 
     },
@@ -236,32 +238,27 @@ instance.web.DiagramView = instance.web.View.extend({
     edit_node: function(node_id){
         var self = this;
         var title = _t('Activity');
-        var pop = new instance.web.form.FormOpenPopup(self);
+        var FormViewDialog = require('web.FormViewDialog');
+        var dialog = new FormViewDialog(this, {
+            res_model: self.node,
+            res_id: node_id,
+            context: self.context || self.dataset.context,
+            title: _t("Open: ") + title,
+        }).open();
 
-        pop.show_element(
-                self.node,
-                node_id,
-                self.context || self.dataset.context,
-                {
-                    title: _t("Open: ") + title
-                }
-            );
-
-        pop.on('write_completed', self, function() {
+        dialog.on('closed', this, function() {
             self.dataset.read_index(_.keys(self.fields_view.fields)).then(self.on_diagram_loaded);
-            });
-        
-        var form_fields = [self.parent_field];
-        var form_controller = pop.view_form;
+        });
 
-       form_controller.on("load_record", self, function(){
+        var form_fields = [self.parent_field];
+        dialog.on('record_loaded', this, function() {
             _.each(form_fields, function(fld) {
-                if (!(fld in form_controller.fields)) { return; }
-                var field = form_controller.fields[fld];
+                if (!(fld in dialog.form_view.fields)) { return; }
+                var field = dialog.form_view.fields[fld];
                 field.$input.prop('disabled', true);
                 field.$drop_down.unbind();
             });
-         });
+        });
 
        
     },
@@ -270,89 +267,73 @@ instance.web.DiagramView = instance.web.View.extend({
     add_node: function(){
         var self = this;
         var title = _t('Activity');
-        var pop = new instance.web.form.SelectCreatePopup(self);
-        pop.select_element(
-            self.node,
-            {
-                title: _t("Create:") + title,
-                initial_view: 'form',
-                disable_multiple_selection: true
-            },
-            self.dataset.domain,
-            self.context || self.dataset.context
-        );
-        pop.on("elements_selected", self, function(element_ids) {
-            self.dataset.read_index(_.keys(self.fields_view.fields)).then(self.on_diagram_loaded);
-        });
-
-        var form_controller = pop.view_form;
-        var form_fields = [this.parent_field];
-
-        form_controller.on("load_record", self, function(){
-            _.each(form_fields, function(fld) {
-                if (!(fld in form_controller.fields)) { return; }
-                var field = form_controller.fields[fld];
-                field.set_value(self.id);
-                field.dirty = true;
-            });
-        });
+        var Dialog = require('web.Dialog');
+        var dialog = new Dialog(this, {
+            title: _t("Create:") + title,
+            buttons: [
+                {text: _t('Create'), classes: 'btn-primary', close: true, click: function () {
+                    self._rpc({
+                        model: self.node,
+                        method: 'create',
+                        args: [{
+                            // Add necessary fields and values for creation
+                        }],
+                    }).then(function () {
+                        self.dataset.read_index(_.keys(self.fields_view.fields)).then(self.on_diagram_loaded);
+                    });
+                }},
+                {text: _t('Cancel'), close: true}
+            ],
+        }).open();
     },
 
     // Creates a popup to edit the connector of id connector_id
     edit_connector: function(connector_id){
         var self = this;
         var title = _t('Transition');
-        var pop = new instance.web.form.FormOpenPopup(self);
-        pop.show_element(
-            self.connector,
-            parseInt(connector_id,10),      //FIXME Isn't connector_id supposed to be an int ?
-            self.context || self.dataset.context,
-            {
-                title: _t("Open: ") + title
-            }
-        );
-        pop.on('write_completed', self, function() {
+        var FormViewDialog = require('web.FormViewDialog');
+        var dialog = new FormViewDialog(this, {
+            res_model: self.connector,
+            res_id: parseInt(connector_id, 10),
+            context: self.context || self.dataset.context,
+            title: _t("Open: ") + title,
+        }).open();
+
+        dialog.on('closed', this, function() {
             self.dataset.read_index(_.keys(self.fields_view.fields)).then(self.on_diagram_loaded);
         });
-    },
 
     // Creates a popup to add a connector from node_source_id to node_dest_id.
     // dummy_cuteedge if not null, will be removed form the graph after the popup is closed.
     add_connector: function(node_source_id, node_dest_id, dummy_cuteedge){
         var self = this;
         var title = _t('Transition');
-        var pop = new instance.web.form.SelectCreatePopup(self);
+        var Dialog = require('web.Dialog');
+        var dialog = new Dialog(this, {
+            title: _t("Create:") + title,
+            buttons: [
+                {text: _t('Create'), classes: 'btn-primary', close: true, click: function () {
+                    self._rpc({
+                        model: self.connector,
+                        method: 'create',
+                        args: [{
+                            source: node_source_id,
+                            destination: node_dest_id,
+                            // Add other necessary fields and values for creation
+                        }],
+                    }).then(function () {
+                        self.dataset.read_index(_.keys(self.fields_view.fields)).then(self.on_diagram_loaded);
+                    });
+                }},
+                {text: _t('Cancel'), close: true}
+            ],
+        }).open();
 
-        pop.select_element(
-            self.connector,
-            {
-                title: _t("Create:") + title,
-                initial_view: 'form',
-                disable_multiple_selection: true
-            },
-            this.dataset.domain,
-            this.context || this.dataset.context
-        );
-        pop.on("elements_selected", self, function(element_ids) {
-            self.dataset.read_index(_.keys(self.fields_view.fields)).then(self.on_diagram_loaded);
-        });
-        // We want to destroy the dummy edge after a creation cancel. This destroys it even if we save the changes.
-        // This is not a problem since the diagram is completely redrawn on saved changes.
-        pop.$el.parents('.modal').on('hidden.bs.modal', function (e){
-            if(dummy_cuteedge){
+        dialog.on('closed', this, function() {
+            if (dummy_cuteedge) {
                 dummy_cuteedge.remove();
             }
         });
-
-        var form_controller = pop.view_form;
-
-
-       form_controller.on("load_record", self, function(){
-            form_controller.fields[self.connectors.attrs.source].set_value(node_source_id);
-            form_controller.fields[self.connectors.attrs.source].dirty = true;
-            form_controller.fields[self.connectors.attrs.destination].set_value(node_dest_id);
-            form_controller.fields[self.connectors.attrs.destination].dirty = true;
-       });
     },
     
     do_hide: function () {
